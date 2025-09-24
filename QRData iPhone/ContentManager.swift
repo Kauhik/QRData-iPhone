@@ -13,11 +13,15 @@ final class ContentManager {
     private var publicDB: CKDatabase { container.publicCloudDatabase }
     private let cache: FileCache
     private let defaultsKey = "LockerQYes_ContentVersion"
+    private let defaultsURLKey = "LockerQYes_CustomURL"
 
     private(set) var currentVersion: Int {
         get { UserDefaults.standard.integer(forKey: defaultsKey) }
         set { UserDefaults.standard.set(newValue, forKey: defaultsKey) }
     }
+
+    // Latest custom URL from the fetched ContentPack, if any
+    private(set) var latestCustomURL: URL?
 
     init(containerID: String) throws {
         self.container = CKContainer(identifier: containerID)
@@ -36,12 +40,23 @@ final class ContentManager {
             throw NSError(domain: "Content", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid bootstrap record"])
         }
 
+        // 2) Fetch ContentPack (always fetch to read customURL; we may still skip asset downloads)
+        let pack = try await publicDB.record(for: latestRef.recordID)
+
+        // Read optional custom URL
+        if let urlString = pack["customURL"] as? String, let url = URL(string: urlString) {
+            latestCustomURL = url
+            UserDefaults.standard.set(url.absoluteString, forKey: defaultsURLKey)
+        } else {
+            latestCustomURL = nil
+            UserDefaults.standard.removeObject(forKey: defaultsURLKey)
+        }
+
+        // If assets already up-to-date, skip downloads but keep the new customURL
         if cloudVersion <= currentVersion {
             return false
         }
 
-        // 2) Fetch ContentPack
-        let pack = try await publicDB.record(for: latestRef.recordID)
         guard let manifestAsset = pack["manifest"] as? CKAsset,
               let manifestURL = manifestAsset.fileURL,
               let data = try? Data(contentsOf: manifestURL),
@@ -71,5 +86,13 @@ final class ContentManager {
         // 4) Atomically update version
         currentVersion = cloudPackVersion
         return true
+    }
+
+    // Convenience to read the last stored custom URL without syncing
+    static func storedCustomURL() -> URL? {
+        if let s = UserDefaults.standard.string(forKey: "LockerQYes_CustomURL") {
+            return URL(string: s)
+        }
+        return nil
     }
 }

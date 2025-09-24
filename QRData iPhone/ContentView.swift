@@ -17,6 +17,9 @@ struct ContentView: View {
     @State private var status: String = "Scan the QR or open via lockerqyes://"
     @State private var images: [UIImage] = []
     @State private var isScanning = true
+    @State private var customURL: URL? = ContentManager.storedCustomURL()
+
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         NavigationStack {
@@ -64,6 +67,20 @@ struct ContentView: View {
                     .padding(.horizontal, 8)
                 }
 
+                if let link = customURL {
+                    Button {
+                        openURL(link)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "link")
+                            Text(link.absoluteString)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+
                 Spacer()
             }
             .padding()
@@ -73,9 +90,11 @@ struct ContentView: View {
                 Task { await handleBootstrapURL(url) }
             }
             .task {
-                // Attempt to show cached images on first launch
                 if let imgs = try? DemoPreviewLoader.loadCachedImages() {
                     images = imgs
+                }
+                if customURL == nil {
+                    customURL = ContentManager.storedCustomURL()
                 }
             }
         }
@@ -106,6 +125,7 @@ struct ContentView: View {
             status = changed ? "Updated to v\(mgr.currentVersion). Assets cached." :
                                "Already up to date (v\(mgr.currentVersion))."
             if let imgs = try? DemoPreviewLoader.loadCachedImages() { images = imgs }
+            customURL = mgr.latestCustomURL ?? ContentManager.storedCustomURL()
         } catch {
             status = "Sync failed: \(error.localizedDescription)"
         }
