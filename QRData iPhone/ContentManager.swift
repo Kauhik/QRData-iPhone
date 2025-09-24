@@ -12,12 +12,13 @@ final class ContentManager {
     private let container: CKContainer
     private var publicDB: CKDatabase { container.publicCloudDatabase }
     private let cache: FileCache
-    private let defaultsKey = "LockerQYes_ContentVersion"
-    private let defaultsURLsKey = "LockerQYes_CustomURLs"
+
+    private static let defaultsVersionKey = "LockerQYes_ContentVersion"
+    private static let defaultsURLsKey = "LockerQYes_CustomURLs"
 
     private(set) var currentVersion: Int {
-        get { UserDefaults.standard.integer(forKey: defaultsKey) }
-        set { UserDefaults.standard.set(newValue, forKey: defaultsKey) }
+        get { UserDefaults.standard.integer(forKey: Self.defaultsVersionKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.defaultsVersionKey) }
     }
 
     // Latest custom URLs from the fetched ContentPack (0...5)
@@ -50,7 +51,7 @@ final class ContentManager {
            let data = jsonString.data(using: .utf8),
            let arr = try? JSONDecoder().decode([String].self, from: data) {
             urlStrings = arr
-        } else if let single = pack["customURL"] as? String { // backward compatibility
+        } else if let single = pack["customURL"] as? String {
             urlStrings = [single]
         }
 
@@ -60,7 +61,7 @@ final class ContentManager {
             .map { $0 }
 
         // Persist to UserDefaults for display without re-sync
-        UserDefaults.standard.set(latestCustomURLs.map { $0.absoluteString }, forKey: defaultsURLsKey)
+        UserDefaults.standard.set(latestCustomURLs.map { $0.absoluteString }, forKey: Self.defaultsURLsKey)
 
         // If assets already up-to-date, skip downloads but keep latestCustomURLs updated
         if cloudVersion <= currentVersion {
@@ -100,7 +101,12 @@ final class ContentManager {
 
     // Convenience to read the last stored custom URLs without syncing
     static func storedCustomURLs() -> [URL] {
-        guard let arr = UserDefaults.standard.array(forKey: "LockerQYes_CustomURLs") as? [String] else { return [] }
+        guard let arr = UserDefaults.standard.array(forKey: Self.defaultsURLsKey) as? [String] else { return [] }
         return arr.compactMap { URL(string: $0) }.prefix(5).map { $0 }
+    }
+
+    // Clear persisted custom URLs
+    static func clearStoredCustomURLs() {
+        UserDefaults.standard.removeObject(forKey: Self.defaultsURLsKey)
     }
 }
