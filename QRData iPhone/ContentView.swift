@@ -17,7 +17,7 @@ struct ContentView: View {
     @State private var status: String = "Scan the QR or open via lockerqyes://"
     @State private var images: [UIImage] = []
     @State private var isScanning = true
-    @State private var customURL: URL? = ContentManager.storedCustomURL()
+    @State private var customURLs: [URL] = ContentManager.storedCustomURLs()
 
     @Environment(\.openURL) private var openURL
 
@@ -67,18 +67,23 @@ struct ContentView: View {
                     .padding(.horizontal, 8)
                 }
 
-                if let link = customURL {
-                    Button {
-                        openURL(link)
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "link")
-                            Text(link.absoluteString)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                if !customURLs.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Links").font(.headline)
+                        ForEach(Array(customURLs.prefix(5).enumerated()), id: \.offset) { idx, link in
+                            Button {
+                                openURL(link)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "link")
+                                    Text(link.absoluteString)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
                 }
 
                 Spacer()
@@ -93,8 +98,8 @@ struct ContentView: View {
                 if let imgs = try? DemoPreviewLoader.loadCachedImages() {
                     images = imgs
                 }
-                if customURL == nil {
-                    customURL = ContentManager.storedCustomURL()
+                if customURLs.isEmpty {
+                    customURLs = ContentManager.storedCustomURLs()
                 }
             }
         }
@@ -125,7 +130,7 @@ struct ContentView: View {
             status = changed ? "Updated to v\(mgr.currentVersion). Assets cached." :
                                "Already up to date (v\(mgr.currentVersion))."
             if let imgs = try? DemoPreviewLoader.loadCachedImages() { images = imgs }
-            customURL = mgr.latestCustomURL ?? ContentManager.storedCustomURL()
+            customURLs = mgr.latestCustomURLs.isEmpty ? ContentManager.storedCustomURLs() : mgr.latestCustomURLs
         } catch {
             status = "Sync failed: \(error.localizedDescription)"
         }

@@ -13,15 +13,15 @@ final class ContentManager {
     private var publicDB: CKDatabase { container.publicCloudDatabase }
     private let cache: FileCache
     private let defaultsKey = "LockerQYes_ContentVersion"
-    private let defaultsURLKey = "LockerQYes_CustomURL"
+    private let defaultsURLsKey = "LockerQYes_CustomURLs"
 
     private(set) var currentVersion: Int {
         get { UserDefaults.standard.integer(forKey: defaultsKey) }
         set { UserDefaults.standard.set(newValue, forKey: defaultsKey) }
     }
 
-    // Latest custom URL from the fetched ContentPack, if any
-    private(set) var latestCustomURL: URL?
+    // Latest custom URLs from the fetched ContentPack (0...5)
+    private(set) var latestCustomURLs: [URL] = []
 
     init(containerID: String) throws {
         self.container = CKContainer(identifier: containerID)
@@ -40,19 +40,29 @@ final class ContentManager {
             throw NSError(domain: "Content", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid bootstrap record"])
         }
 
-        // 2) Fetch ContentPack (always fetch to read customURL; we may still skip asset downloads)
+        // 2) Fetch ContentPack (always fetch to read customURLs; we may still skip asset downloads)
         let pack = try await publicDB.record(for: latestRef.recordID)
 
-        // Read optional custom URL
-        if let urlString = pack["customURL"] as? String, let url = URL(string: urlString) {
-            latestCustomURL = url
-            UserDefaults.standard.set(url.absoluteString, forKey: defaultsURLKey)
-        } else {
-            latestCustomURL = nil
-            UserDefaults.standard.removeObject(forKey: defaultsURLKey)
+        // Read optional array of custom URLs from "customURLs" (JSON string),
+        // with backward-compat for a single "customURL" string.
+        var urlStrings: [String] = []
+        if let jsonString = pack["customURLs"] as? String,
+           let data = jsonString.data(using: .utf8),
+           let arr = try? JSONDecoder().decode([String].self, from: data) {
+            urlStrings = arr
+        } else if let single = pack["customURL"] as? String { // backward compatibility
+            urlStrings = [single]
         }
 
-        // If assets already up-to-date, skip downloads but keep the new customURL
+        latestCustomURLs = urlStrings
+            .compactMap { URL(string: $0) }
+            .prefix(5)
+            .map { $0 }
+
+        // Persist to UserDefaults for display without re-sync
+        UserDefaults.standard.set(latestCustomURLs.map { $0.absoluteString }, forKey: defaultsURLsKey)
+
+        // If assets already up-to-date, skip downloads but keep latestCustomURLs updated
         if cloudVersion <= currentVersion {
             return false
         }
@@ -88,11 +98,9 @@ final class ContentManager {
         return true
     }
 
-    // Convenience to read the last stored custom URL without syncing
-    static func storedCustomURL() -> URL? {
-        if let s = UserDefaults.standard.string(forKey: "LockerQYes_CustomURL") {
-            return URL(string: s)
-        }
-        return nil
+    // Convenience to read the last stored custom URLs without syncing
+    static func storedCustomURLs() -> [URL] {
+        guard let arr = UserDefaults.standard.array(forKey: "LockerQYes_CustomURLs") as? [String] else { return [] }
+        return arr.compactMap { URL(string: $0) }.prefix(5).map { $0 }
     }
 }
